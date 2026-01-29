@@ -1,6 +1,8 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns 
 import random
@@ -979,4 +981,5 @@ if st.button("▶ SIMULAR EQUILIBRIO", type="primary"):
             st.info("Nota: Si las barras de un color se concentran en el centro y otras en los extremos, el modelo está replicando fenómenos de gentrificación o expulsión.")
             
         else:
+
             st.warning("No hay datos de población para mostrar.")
