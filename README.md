@@ -10,7 +10,7 @@ La herramienta permite experimentar con políticas de transporte y observar cóm
 - Uso de infraestructura  
 - Emisiones estimadas  
 
----
+ 
 
 ## 1. Requisitos
 
@@ -20,7 +20,7 @@ Necesitas tener instalado:
 - **pip** (viene con Python)
 - Conexión a internet para instalar dependencias
 
----
+ 
 
 ## 2. Instalar Python
 
@@ -45,7 +45,7 @@ Si no funciona, prueba:
 python3 --version
 ```
 
----
+ 
 
 ## 3. Descargar el proyecto
 
@@ -62,7 +62,7 @@ cd TU_REPOSITORIO
 2. Descomprime el archivo  
 3. Abre la carpeta del proyecto en una terminal  
 
----
+ 
 
 ## 5. Instalar dependencias
 
@@ -77,7 +77,7 @@ Si no funciona, instala manualmente:
 pip install streamlit numpy pandas matplotlib seaborn
 ```
 
----
+ 
 
 ## 6. Ejecutar la aplicación
 
@@ -95,7 +95,6 @@ Si no se abre, copia la dirección que aparece en la terminal, normalmente:
 http://localhost:8501
 ```
 
----
 
 ## 7. Archivos importantes
 
@@ -108,7 +107,7 @@ README.md
 
 `Ciudad2.py` debe estar en la **misma carpeta** que `app.py`.
 
----
+
 
 ## 8. Qué permite hacer el simulador
 
@@ -128,7 +127,7 @@ Y observar:
 - Niveles de congestión  
 - Estimaciones de emisiones  
 
----
+
 
 ## 9. Problemas comunes
 
@@ -140,7 +139,7 @@ Reinstala Python y asegúrate de marcar:
 Add Python to PATH
 ```
 
----
+ 
 
 ### Streamlit no se reconoce
 
@@ -148,7 +147,7 @@ Add Python to PATH
 pip install streamlit
 ```
 
----
+ 
 
 ### Error relacionado con `Ciudad2`
 
@@ -160,7 +159,7 @@ Ciudad2.py
 
 esté en la misma carpeta que `app.py`.
 
----
+ 
 
 ### Puerto ocupado
 
@@ -170,18 +169,7 @@ Ejecuta en otro puerto:
 streamlit run app.py --server.port 8502
 ```
 
----
-
-## 10. Librerías utilizadas
-
-- streamlit  
-- numpy  
-- pandas  
-- matplotlib  
-- seaborn  
-
----
-
-## 11. Licencia
+## 10. Licencia
 
 GPLv3
+El uso de este repositorio es de libre acceso y modificación, pero no se puede cambiar su uso a uno privativo. 
