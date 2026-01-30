@@ -97,7 +97,7 @@ class Ciudad():
     alpha, 
     la oferta de hogares se genera al construir el objeto
     """
-    def __init__(self, L=1001, CBD = 501, H = [33300, 33300, 33300], y = [100.0, 20.0, 4.0],  ancho_celda=0.01):
+    def __init__(self, L=1001, CBD = 501, H = [33300, 33300, 33300], y = [100.0, 20.0, 4.0],  ancho_celda=0.01, lambda_h=[1,1,1], alpha=[1.3,1.2,1.1], rho=[1,1,1]):
         # Parámetros (input)
         self.L = L; """Cantidad de Parcelas"""
         self.parcelas: list[list[int]] = [[] for i in range(L)] # una lista de listas, cada lsita interior representa las casas en el terreno
@@ -123,12 +123,13 @@ class Ciudad():
         self.Q = np.zeros((len(H), L))
 
         print("Ciudad generada, resolviendo equilibrio")
-        self.resolver_equilibrio_logit(lambda_h=[1,1,1], alpha=[1.3,1.2,1.1], rho=[1,1,1] )
+        self.resolver_equilibrio_logit(lambda_h, alpha, rho)
         print("Asignando hogares")
         self.asignar_hogares_simple()
 
-    def generar_poblacion_completa(self, config):
-        """ entrega el estado actual de la población y la ciudad como un diccionario para ser usado en el módulo demanda"""
+    def generar_poblacion_completa(self, config = CONFIG_DEMANDA):
+        """ Entrega el estado actual de la población y la ciudad como un diccionario para ser usado en el módulo demanda
+        Según la config"""
         poblacion = []
         id_counter = 1
 
@@ -206,6 +207,7 @@ class Ciudad():
                 i = 2*(I-1) - i
             S[i] += 1
 
+        self.S = S
         return S
 
     def resolver_equilibrio_logit(
@@ -235,7 +237,7 @@ class Ciudad():
         f_div_lambda = (
             - alpha[:, None] * T
             - rho[:, None] * self.S[None, :]
-        ) / lambda_h[:, None]
+        )/ lambda_h[:, None]
 
         logZ = (
             np.log(self.H)[:, None]      # (H,1)
@@ -251,7 +253,6 @@ class Ciudad():
         #print(f_div_lambda.shape)
         assert f_div_lambda.shape == (H, I)
         assert logZ.shape == (H, I)
-        
 
 
         def F(u_bar):
@@ -308,82 +309,191 @@ class Ciudad():
         Q = np.zeros((len(self.H), I))
 
         for i in range(I):
-            # 1. SI ESTAMOS EN EL CBD, SALTAR (DEJAR Q=0)
-            if i == self.cbd_index: 
-                continue
-            
-            # 2. CÁLCULO NORMAL PARA EL RESTO
-            # Nota: Si self.S[i] es 0, np.log dará -inf y Q será 0 automáticamente, 
-            # pero el 'if' de arriba es más seguro y evita advertencias.
-            if self.S[i] > 0:
-                log_q = (
-                    np.log(self.S[i])
-                    + beta * (self.y + f_div_lambda[:, i] - u_bar - p[i])
-                )
-                Q[:, i] = np.exp(log_q - logsumexp(log_q))
-            else:
-                Q[:, i] = 0.0 # Asegurar ceros si no hay oferta
+            log_q = (
+                np.log(self.S[i])
+                + beta * (self.y + f_div_lambda[:, i] - u_bar - p[i])
+            )
+
+            Q[:, i] = np.exp(log_q - logsumexp(log_q))
 
         self.u = u_bar
         self.p = p
         self.Q = Q
         return
 
-    def asignar_hogares_simple(self): # TODO implementar
-        """Asigna hogares de una mediante una bruta adaptación de las probabilidades desubasta Q
-        La matriz Q debe ser calculada antes llamando a self.resolver_equilibrio(...)
-        Nota
-        ----
-        Se hará la asignación en base a la probabilidad de subasta
-        que razonablemente considerará la cantidad de hogares, por lo que la distribucion DEBERIA ser decente
+    def resolver_equilibrio_frechet(
+            self,
+            lambda_h,
+            alpha,
+            rho,
+            T=None,
+            beta=1.0,
+            tol=1e-8,
+            max_iter=10000):
+
         """
-        print("Asignando hogares simple")
+        Versión Frechét del equilibrio bid-auction.
+        Misma estructura que resolver_equilibrio_logit.
+        """
+
+        if T is None:
+            T = np.asarray(self.T)
+
+        lambda_h = np.asarray(lambda_h)
+        alpha = np.asarray(alpha)
+        rho = np.asarray(rho)
+
+        H = len(self.H)
+        I = self.L
+
+        self.S = np.asarray(self.S, dtype=float).reshape(-1)
+
+        # ---------------------------------
+        # f_h(i) / lambda_h
+        # ---------------------------------
+
+        f_div_lambda = (
+            - alpha[:, None] * T
+            - rho[:, None] * self.S[None, :]
+        ) / lambda_h[:, None]
+
+        # log w_hi  (willingness to pay en log)
+        logw = self.y[:, None] + f_div_lambda
+
+        # log Z estructural
+        logZ = np.log(self.H)[:, None] + beta * logw
+
+        # ---------------------------------
+        # Operador de punto fijo
+        # ---------------------------------
+
+        def F(u_bar):
+
+            # log denom_i = log sum_g H_g exp(beta(logw_gi - u_g))
+            log_denom = logsumexp(
+                logZ - beta * u_bar[:, None],
+                axis=0
+            )
+
+            # log numerador_h
+            log_num = (
+                np.log(self.S)[None, :]
+                + beta * logw
+                - log_denom[None, :]
+            )
+
+            u_new = (1 / beta) * logsumexp(log_num, axis=1)
+
+            u_new -= u_new[0]
+
+            return u_new
+
+        # ---------------------------------
+        # Iteración
+        # ---------------------------------
+
+        u_bar = np.zeros(H)
+
+        for it in range(max_iter):
+            u_new = F(u_bar)
+
+            if np.linalg.norm(u_new - u_bar) < tol:
+                print(f"Convergió en {it} iteraciones")
+                break
+
+            u_bar = u_new
+
+        # ---------------------------------
+        # Precios Frechét
+        # ---------------------------------
+
+        log_p = logsumexp(
+            np.log(self.H)[:, None]
+            + beta * (logw - u_bar[:, None]),
+            axis=0
+        )
+
+        p = log_p / beta
+
+        # ---------------------------------
+        # Probabilidades Frechét
+        # ---------------------------------
+
+        Q = np.zeros((H, I))
+
+        for i in range(I):
+
+            log_q = (
+                np.log(self.S[i])
+                + beta * (logw[:, i] - u_bar - p[i])
+            )
+
+            Q[:, i] = np.exp(log_q - logsumexp(log_q))
+
+        # ---------------------------------
+        # Guardar
+        # ---------------------------------
+
+        self.u = u_bar
+        self.p = p
+        self.Q = Q
+
+        return u_bar, p, Q
+
+
+
+    def asignar_hogares_simple(self):
+        print("Asignando hogares simple (barrido por rondas)")
 
         num_estratos, num_parcelas = self.Q.shape
-        # Q[h, i] = P(hogar de h -> parcela i)
-        parcelas: list[list[int]] = [[] for _ in range(num_parcelas)]
-        
+
         try:
-            assert sum(self.S) == sum(self.H), "La cantidad de espacios disponibles debe ser igual a la cantidad de hogares" 
-            assert len(self.S) == num_parcelas, "Deben calzar en la matriz de subasta la cantidad de parcelas de la ciudad"
-            assert len(self.H) == num_estratos, "Deben calzar en la matriz de subasta la cantidad de estratos económicos"
+            assert sum(self.S) == sum(self.H)
+            assert len(self.S) == num_parcelas
+            assert len(self.H) == num_estratos
         except AssertionError as e:
             print("Los parámetros no calzan entre sí")
             print(e)
             return
-        
-        # contador hogares sin asignar
-        # Recorremos las parcelas en orden
-        
-        S = np.asarray(self.S, dtype=int).copy()
-        H = np.asarray(self.H, dtype=int).copy()
+
+        S_rest = np.asarray(self.S, dtype=int).copy()
+        H_rest = np.asarray(self.H, dtype=int).copy()
 
         parcelas = [[] for _ in range(num_parcelas)]
-        hogares_restantes = H.copy()
 
-        for i in range(num_parcelas):
-            pesos = self.Q[:, i].copy()
-            capacidad = S[i]
+        # Mientras queden espacios en alguna parcela
+        while S_rest.sum() > 0:
 
-            for _ in range(capacidad):
-                pesos[hogares_restantes == 0] = 0.0
+            # Recorremos parcelas de izquierda a derecha
+            for i in range(num_parcelas):
 
-                if pesos.sum() == 0:
-                    print("Error en la asignación, un hogar individual no se pudo asignar!!")
-                    break
+                if S_rest[i] == 0:
+                    continue  # ya está llena
 
-                probs = pesos / pesos.sum()
-                h = np.random.choice(num_estratos, p=probs)  # +1 para que no parta de 0
+                pesos = self.Q[:, i].copy()
 
-                parcelas[i].append(int(h)+1)
-                hogares_restantes[h] -= 1
+                # bloquear estratos sin hogares
+                pesos[H_rest == 0] = 0.0
+
+                masa = pesos.sum()
+                if masa == 0:
+                    print("Error: no hay hogares disponibles para asignar")
+                    return
+
+                probs = pesos / masa
+                h = np.random.choice(num_estratos, p=probs)
+
+                parcelas[i].append(int(h) + 1)
+                H_rest[h] -= 1
+                S_rest[i] -= 1
 
         self.parcelas = parcelas
 
-    def actualizar(self, T, lambda_h=[1,1,1], alpha=[1.3,1.2,1.1], rho=[1,1,1]):
+
+    def actualizar(self, T= None, lambda_h=[1,1,1], alpha=[1.3,1.2,1.1], rho=[1,1,1]):
         """ Actualiza la fn de transporte y recalcula asignaciones.
         adicionalmente se pueden modificar los valores de la función de amenity"""
-        self.T = np.array(T)
+        if T is not None: self.T = np.array(T)
         self.resolver_equilibrio_logit(lambda_h, alpha, rho, T)
         self.asignar_hogares_simple()
 
@@ -459,16 +569,6 @@ class Ciudad():
         plt.legend()
         plt.tight_layout()
         plt.show()
-
-"""
-    TODO:
-    - implementar interaccion
-    - comprobar uso de suelo
-    - hacer pequeña prueba y (prueba grande)
-    - portar tal vez los métodos de graficars
-"""                       
-
-
 
 # =================================
 # Funciones Auxiliares de los pibes
