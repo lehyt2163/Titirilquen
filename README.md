@@ -10,6 +10,7 @@ La herramienta permite experimentar con políticas de transporte y observar cóm
 - Uso de infraestructura  
 - Emisiones estimadas  
 
+La aplicación interactiva se puede acceder directamente desde el navegador [aquí](https://titirilquenv1.streamlit.app/)
  
 
 ## 1. Requisitos
