@@ -85,7 +85,7 @@ pip install streamlit numpy pandas matplotlib seaborn
 Desde la carpeta del proyecto:
 
 ```bash
-streamlit run app.py
+python -m streamlit run app.py
 ```
 
 Se abrirá el navegador automáticamente.
