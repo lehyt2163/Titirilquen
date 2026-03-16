@@ -53,8 +53,8 @@ python3 --version
 ### Opción A — Con Git
 
 ```bash
-git clone https://github.com/TU_USUARIO/TU_REPOSITORIO.git
-cd TU_REPOSITORIO
+git clone https://github.com/lehyt2163/Titirilquen.git
+cd Titirilquen
 ```
 
 ### Opción B — Manual
