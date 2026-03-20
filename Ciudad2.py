@@ -6,31 +6,32 @@ import random
 from scipy.special import logsumexp
 
 """
-# USO:
-# reemplazar :
-# mi_ciudad = generar_ciudad(...)
-# poblacion = mi_ciudad.generar_poblacion_completa(mi_ciudad, CONFIG_DEMANDA) con:
+Módulo uso de suelo
 
-from Ciudad2 import *
+(alt + Z para activar line breaks en vs code)
 
-mi_ciudad = Ciudad(L=1001, CBD = 501, H = [33300, 33300, 33300], y = [100.0, 20.0, 4.0],  ancho_celda=0.01)
-# los parámetros del constructor se pueden ajustar
+En el siguiente archivo se encuentra la clase Ciudad, almacena la información y mecanismos internos necesarios para la mecanica de asignación de hogares según estratos económicos con distintas características.
 
-# Generar lista de diccionarios (lista de hogares/usuarios)
-poblacion = mi_ciudad.generar_poblacion_completa(CONFIG_DEMANDA) # (en teoría el mismo config, tiene que estar en algun lado)
-# usar poblacion como se usaría normalmente
+Esta planificada para interactuar con los módulos de transporte en app.py, pero puede funcionar y generar resultados por si misma.
 
+Ejemplos de uso se pueden ver en un comentario al final del archivo.
 
-## Extras:
+Los pasos importantes que hacen y que se pueden modificar son
+ - iniciar los atributos importantes propios de la ciudad (largo, cantidad de hogares por estrato, posición del cbd, atributos y forma de la ~willingness to pay~, etc.)
 
-# función  para actualizar, se pueden modificar varios parámetros y recalcula la asignación
-# T = construir_T_desde_csv("Ciudad\Suelo\microdatos_individuos.csv", len(ciudad.H), ciudad.L)
-ciudad.actualizar(T, alpha=[1,1,1])  # con un T: (H,I) funcion de penalizacion de transporte 
+ - generar una oferta de terrenos o casas (que calce con la demanda, dada por la cantidad total de hogares) vector S[i] de capacidades por 'terreno' i.
 
+ - calcular utilidades en equilibrio, y con esto, la matriz Q de prob. de subastas, y los precios.
 
-# tambien viene con un coso para plotear distribuciones
-ciudad.dibujar_hogares()
-ciudad.plot_stratum_composition_by_parcel()
+ - Asignar familias a terrenos, en base a las probabilidades Q dadas en el cálculo anterior.
+
+Se puede modificar de este proceso, la forma base de la ciudad (dimensión, tamaño, etc), la forma de la distribución de la oferta de terrenos/casas, como tambien lo asociado a la función de willingness to pay
+
+La implementación base de esta última considera la distancia al cbd, como un costo de transporte lineal c/r a la distancia al cbd (función T), y un factor de "densidad", que penaliza según la capacidad de la parcela (S[i]).
+
+El constructor se encarga de inicializar una ciudad estándar, genera una oferta de casas, y asigna los hogares de inmediato, se pueden modificar todos los parámetros en el constructor, incluyendo por ejemplo, el peso que se le da a cada factor de la willingness to pay, se detalla en su docstring.
+
+CONFIG_DEMANDA es un diccionario con datos para traducir los datos de la ciudad al módulo de oferta de transporte, no se usa dentro de las dinámicas internas de la ciudad. (ignorar)
 """
 CONFIG_DEMANDA = {
     "globales": {
@@ -87,15 +88,47 @@ CONFIG_DEMANDA = {
 }
 
 class Ciudad():
-    """
-    Clase que almacena la info. de una ciudad entera para la simulación
-    La ciudad tiene un tamaño L, que corresponden a las "parcelas" de terreno.
-    Un distrito de negocios central (CBD)
-    Una lista de parcelas, cada una puede contener una cantidad de casas, dado por generar_oferta_normal(...)
-    cada casa se identifica por un estrato (1, 2 o 3)
-    cada estrato puede tener comportamientos distintos dependiendo de los valores vectoriales
-    alpha, 
-    la oferta de hogares se genera al construir el objeto
+    r"""
+    Clase que almacena la info. de una ciudad entera para la simulación.
+
+    $\alpha$
+
+    Uso
+    ---
+    Cuando se crea, se calcula de inmediato una asignación de la simulación
+
+    'ciudad = Ciudad()
+    ciudad.dibujar_hogares()'
+    plotea la distribución de una ciudad estandar
+
+    'ciudad = Ciudad(L=100, H=[200, 100, 50])'
+    Se pueden iniciar con distintos valores importantes, la población viene dada por H, los grupos de estratos. Otros parámetros se pueden cambiar actualizando la ciudad:
+    'ciudad.actualizar(T, alpha) # recalcula considerando los cambios
+    ciudad.dibujar_hogares()'
+
+    la utilidad se define como:
+
+    u_h = \lambda_h(y_h - p_i) + f_h(i)
+
+    donde f tiene un costo asociado al tiempo/transporte T, y una penalización a la "densidad" S,
+    dependencia lineal controlada por los parametros alpha y rho respectivamente.
+
+    Atributos
+    ---------
+    :param L:
+        Largo de la ciudad, cantidad de parcelas o terrenos.
+    :param S:
+        Capacidad, vector de capacidades por terreno, S[i] = cantidad de casas en terreno i.
+    :param parcelas:
+        Lista de listas, almacena la asignación de los hogares a las parcelas. \n
+        parcelas[i] = lista de hogares asignados a la parcela i
+        los hogares se caracterizan por su estrato económico (1, 2 o 3).
+    :param cbd_index:
+        Número de la parcela que será considerada el CBD, no se asignarán hogares a esta parcela.
+    :param H:
+        Vector con la cantidad de hogares por estrato, ej: [100,50,10]\n
+        Adicionalmente el parámetro "y", que es el ingreso de cada estrato económico.
+    
     """
     def __init__(self, L=1001, CBD = 501, H = [33300, 33300, 33300], y = [100.0, 20.0, 4.0],  ancho_celda=0.01, lambda_h=[1,1,1], alpha=[1.3,1.2,1.1], rho=[1,1,1]):
         # Parámetros (input)
@@ -127,9 +160,12 @@ class Ciudad():
         print("Asignando hogares")
         self.asignar_hogares_simple()
 
+
+    
     def generar_poblacion_completa(self, config = CONFIG_DEMANDA):
-        """ Entrega el estado actual de la población y la ciudad como un diccionario para ser usado en el módulo demanda
-        Según la config"""
+        """Esta función es para interactuar con el modelo transporte!
+        Entrega el estado actual de la población y la ciudad como un diccionario para ser usado en el módulo demanda
+        Según la config."""
         poblacion = []
         id_counter = 1
 
@@ -176,8 +212,8 @@ class Ciudad():
 
     def generar_oferta_normal(self, I, N, CBD, stdv=None) -> list[int]:
         """
-        Genera uan oferta posible de capacidades por terreno para la ciudad de los parámetros 
-        como una "normal" discreta que excluye el CBD.
+        (Crea el vector S) Genera uan oferta de "capacidades por terreno" para la ciudad de los parámetros 
+        como una "normal" discreta que excluye el CBD .
         
         :param I: Cantidad de parcelas o terrenos de la ciudad
         :param N: Cantidad de habitantes totales
@@ -221,6 +257,7 @@ class Ciudad():
             max_iter = 10000): # Delicadisimo
         """
         Resuelve utilidades normalizadas u barra según ecuación (5.4) de Fco. Martínez Microeconomic modelling in urban science 
+        se utiliza la forma 
         :param lambda_h: Marginal utility income, que tanto importa el dinero para la utilidad.
         Regula la disposición de cada hogar de gastar dinero.
         :param alpha: Factor que multiplica la función de transporte
@@ -258,7 +295,7 @@ class Ciudad():
         def F(u_bar):
             """
             Operador de punto fijo según ecuación (5.4)
-            usando logsumexp (numéricamente estable)
+            usando logsumexp o se rompe todo por float aprxs
             """
 
             # log denom_i = log sum_g H_g exp(beta(y_g + f_gi/lambda_g - u_g))
@@ -332,8 +369,9 @@ class Ciudad():
             max_iter=10000):
 
         """
-        Versión Frechét del equilibrio bid-auction.
+        Versión MALA Frechét del equilibrio bid-auction.
         Misma estructura que resolver_equilibrio_logit.
+        hay que reeimplementar! hay un detalle en el planteo de F
         """
 
         if T is None:
@@ -443,6 +481,7 @@ class Ciudad():
 
 
     def asignar_hogares_simple(self):
+        """Asigna según los valores de Q los estratos a self.parcela """
         print("Asignando hogares simple (barrido por rondas)")
 
         num_estratos, num_parcelas = self.Q.shape
@@ -598,9 +637,29 @@ def calcular_duracion_jornada(estrato, es_flexible, config):
     else:
         return int(params_j["horas_rigido"] * 60), "Rígido"
 
-import numpy as np
-import pandas as pd
+def asignar_horario_entrada_discreto(estrato, config, intervalo=15):
+    """Calcula la hora de entrada basada en probabilidad y estrato"""
+    prob_flex = config["estratos"][estrato]["prob_jornada_flexible"]
 
+    #Media y Desviación por estrato(Sigma)
+    perfiles = {
+        1: {'media': 540, 'sigma_rigido': 20, 'sigma_flex': 60}, # 9:00 AM
+        2: {'media': 510, 'sigma_rigido': 15, 'sigma_flex': 40}, # 8:30 AM
+        3: {'media': 480, 'sigma_rigido': 10, 'sigma_flex': 20}  # 8:00 AM
+    }
+
+    es_flexible = random.random() < prob_flex
+    p = perfiles[estrato]
+    sigma = p['sigma_flex'] if es_flexible else p['sigma_rigido']
+
+    minuto_continuo = np.random.normal(loc=p['media'], scale=sigma)
+    return redondear_horario(minuto_continuo, intervalo)
+
+
+
+# Función para leer datos de csv para actualizar función de transporte
+# No ha sido testeada!! 
+# se le añadiría 
 def construir_T_desde_csv(
     path_csv: str,
     H: int,
@@ -644,24 +703,6 @@ def construir_T_desde_csv(
     return T
 
 
-def asignar_horario_entrada_discreto(estrato, config, intervalo=15):
-    """Calcula la hora de entrada basada en probabilidad y estrato"""
-    prob_flex = config["estratos"][estrato]["prob_jornada_flexible"]
-
-    #Media y Desviación por estrato(Sigma)
-    perfiles = {
-        1: {'media': 540, 'sigma_rigido': 20, 'sigma_flex': 60}, # 9:00 AM
-        2: {'media': 510, 'sigma_rigido': 15, 'sigma_flex': 40}, # 8:30 AM
-        3: {'media': 480, 'sigma_rigido': 10, 'sigma_flex': 20}  # 8:00 AM
-    }
-
-    es_flexible = random.random() < prob_flex
-    p = perfiles[estrato]
-    sigma = p['sigma_flex'] if es_flexible else p['sigma_rigido']
-
-    minuto_continuo = np.random.normal(loc=p['media'], scale=sigma)
-    return redondear_horario(minuto_continuo, intervalo)
-
 
 
 """
@@ -673,6 +714,34 @@ ciudad.plot_stratum_composition_by_parcel()
 T = construir_T_desde_csv("Ciudad\Suelo\microdatos_individuos.csv", len(ciudad.H), ciudad.L)
 
 ciudad.actualizar(T, alpha=[1,1,1])
+ciudad.plot_stratum_composition_by_parcel()
+
+# Uso en interacción con transporte:
+
+# USO:
+# reemplazar :
+# mi_ciudad = generar_ciudad(...)
+# poblacion = mi_ciudad.generar_poblacion_completa(mi_ciudad, CONFIG_DEMANDA) con:
+
+from Ciudad2 import *
+
+mi_ciudad = Ciudad(L=1001, CBD = 501, H = [33300, 33300, 33300], y = [100.0, 20.0, 4.0],  ancho_celda=0.01)
+# los parámetros del constructor se pueden ajustar
+
+# Generar lista de diccionarios (lista de hogares/usuarios)
+poblacion = mi_ciudad.generar_poblacion_completa(CONFIG_DEMANDA) # (en teoría el mismo config, tiene que estar en algun lado)
+# usar poblacion como se usaría normalmente
+
+
+## Extras:
+
+# función  para actualizar, se pueden modificar varios parámetros y recalcula la asignación
+# T = construir_T_desde_csv("Ciudad\Suelo\microdatos_individuos.csv", len(ciudad.H), ciudad.L)
+ciudad.actualizar(T, alpha=[1,1,1])  # con un T: (H,I) funcion de penalizacion de transporte 
+
+
+# tambien viene con un coso para plotear distribuciones
+ciudad.dibujar_hogares()
 ciudad.plot_stratum_composition_by_parcel()
 """
 
